@@ -1,0 +1,148 @@
+# 金鑰要放哪：從 CI 變數到私鑰永不落地
+
+第 3 章那張「兩把鑰匙、兩種威脅」的表裡，私鑰那格寫著「防偷：HSM／keystore，
+私鑰不落地」，一筆帶過。現在不能再帶過了——上一章結尾指出：整條成品簽章鏈的地基，
+是 pipeline 簽章時用的那把私鑰。**它放哪，決定整條鏈的真實強度。**
+
+先預測：假設攻擊者拿下了你的 CI——能改 pipeline 定義、能跑任意 job（供應鏈攻擊裡
+這不是罕見劇本，第 1 章的 SolarWinds 就是 build 環境失守）。以下四種保管方式，
+他各拿走什麼？
+
+1. 私鑰以 base64 貼在 CI 的 secret 變數裡
+2. 私鑰在 keystore 檔案（`.p12`）裡，密碼在 CI 變數
+3. 私鑰在 HSM（Hardware Security Module，硬體安全模組）裡
+4. 私鑰在 Vault 這類 secrets 管理服務的簽章引擎裡
+
+想清楚再往下——這題的答案結構，比任何單一工具的知識都值錢。
+
+## 威脅模型的四級演進
+
+| 級 | 做法 | CI 失守時攻擊者拿到什麼 | 事後 |
+|---|---|---|---|
+| 1（最差） | 私鑰直接放 CI 變數 | **私鑰本體**——一行 `echo` 帶走 | 離線無限簽，**永久失守**；幾乎無稽核痕跡 |
+| 2 | keystore 檔＋密碼 | 檔案＋密碼通常在同一條 pipeline 湊得齊——**仍是私鑰本體** | 同上，只是多一道工 |
+| 3 | HSM | **只能「使用」，偷不走**——私鑰在晶片內生成、不可匯出 | 攻擊者離場即失去能力；硬體留稽核紀錄 |
+| 4 | Vault Transit | 同上——**簽章操作進 Vault，私鑰出不來** | 同上＋原生 audit log、金鑰輪替、細粒度權限、短壽命 token |
+
+第 1、2 級和第 3、4 級之間有一條質變的線，值得用力畫出來：
+
+> 前兩級的失守是**偷走鑰匙**——一次得手、永久有效、無聲無息。
+> 後兩級的失守降級為**濫用簽章服務**——攻擊者必須「在場」才能簽、每一筆都留下帳、
+> 你可以輪替金鑰止血。
+>
+> **從「永久失守」降到「在場濫用」，是質變，不是量變。**
+
+第 1 級的「永久」有多痛，用第 2 章的知識就能推出來：私鑰外洩後，攻擊者可以在
+自己的機器上對任何內容產生**數學上完全有效**的簽章——你的驗章閘門每一步都會回傳
+成功。撤銷憑證、換公鑰當然可以，但在你**發現**之前（往往是幾個月），
+所有掛你的章的東西都不可信，而且你分不出哪些是真的。
+
+### 第 3 級：HSM
+
+HSM 的核心承諾只有一句：**私鑰在硬體內生成，且不可匯出（non-exportable）**。
+簽章運算送進硬體、簽章結果出來，私鑰從生到死不離開晶片。應用程式透過標準介面接上去：
+Java 走 PKCS#11、.NET 走 CNG；上一章那些工具（cosign、signtool、jarsigner）都接得上。
+開發者端的 YubiKey 是同一承諾的個人版——PS.1 的 commit 簽章金鑰放它裡面，
+筆電被打穿也偷不走鑰匙。這是典型金融機構的傳統正解，代價是硬體採購與營運（誰管
+HSM、壞了怎麼辦、怎麼輪替）。
+
+### 第 4 級：Vault Transit——簽章即服務
+
+HashiCorp Vault 的 **Transit engine** 把同一個承諾做成軟體服務：金鑰在 Vault 裡
+生成與保管，應用程式要簽章時，把**待簽內容送進 Vault 的 API，拿回簽章**——
+私鑰永不離開 Vault，本機自始至終只摸得到「公鑰＋簽章」。
+
+它跟 cosign 的接法漂亮得值得一看：
+
+```bash
+# key generation happens INSIDE Vault; nothing private touches disk
+cosign generate-key-pair --kms "hashivault://signing-key"
+
+# sign: cosign calls the Vault Transit API; only the signature comes back
+# (--tlog-upload=false: keyed model, air-gapped friendly, as in Chapter 7)
+cosign sign-blob --yes --tlog-upload=false \
+  --key "hashivault://signing-key" \
+  --output-signature app.war.sig app.war
+
+# export the PUBLIC key; verifiers need nothing else
+cosign public-key --key "hashivault://signing-key" > signing-key.pub
+
+# verify: fully offline, public key only -- same path as Chapter 2
+cosign verify-blob --key signing-key.pub --signature app.war.sig app.war
+```
+
+我在本機實測過這條路（Vault 跑 dev mode 容器）：簽章那步，`cosign` 根本沒有
+讀任何私鑰檔——它拿著一個 Vault token 去呼叫 Transit API。CI 裡真正需要保護的
+從「私鑰」變成「一個**短壽命、權限只有『用這把 key 簽章』**的 token」。
+token 外洩當然還是事故，但它會過期、權限窄、每次使用都進 audit log——
+對照第 1 級那把「永久、全能、無帳」的裸私鑰，威脅模型完全不同。
+再加上 Vault 原生的金鑰輪替（rotate 後舊簽章仍可驗、新簽章用新版本 key），
+止血動作從「全面換發公鑰」變成一個指令。
+
+::: {.callout-warning}
+## Dev mode 只能拿來學
+上面的實測用的是 Vault **dev mode**：記憶體儲存、自動 unseal、root token 寫死在
+啟動參數——每一項都是生產環境的反面教材。正式部署至少要：持久化儲存（Raft）、
+auto-unseal、AppRole 之類的機器身分換**短 TTL、最小權限** token、開啟 audit device。
+本書的實驗價值在模型驗證，不在部署範本。
+:::
+
+### 誠實右欄：第 3、4 級擋不住什麼
+
+先預測：攻擊者在 CI 在場期間，能不能叫 HSM／Vault 幫他簽一個有毒的 artifact？
+
+**能。**這是本章最重要的誠實聲明：HSM 和 Vault 守的是「鑰匙拿不走」，
+不是「簽出來的都是好東西」。攻擊者在場時送什麼進去、出來的就是合法簽章——
+簽章忠實地幫毒成品背書（第 5 章 ② Build 那格的老問題）。擋「簽了不該簽的東西」
+要靠別的層：Vault policy 限縮誰能叫哪把 key、audit log 讓每筆簽章可追溯、
+上一章的 provenance 把「哪條 pipeline 簽的」綁進聲明、部署端驗章閘門核對這些情境。
+金鑰保管解決的是四級表裡那一欄，不是整張表。
+
+## Adapter 模式：換保管後端，驗章閘門零改動
+
+還有一個設計值得單獨拿出來講。回看上面四級——一個組織很可能逐級演進：
+PoC 用檔案金鑰，上線前換 Vault，幾年後合規要求換公司的 HSM。如果每次換保管方式
+都要改部署端的驗章邏輯，這個演進就會被「不敢動」卡死。
+
+解法是把**簽章端**和**驗章端**解耦：
+
+| 保管後端 | 簽章端（cosign `--key`） | 驗章端 |
+|---|---|---|
+| 檔案（PoC） | `cosign.key` | 公鑰＋`verify-blob` |
+| Vault Transit | `hashivault://signing-key` | **同上，零改動** |
+| HSM | `pkcs11://...` | **同上，零改動** |
+
+簽章端換後端，只是換 `--key` 的 URI scheme；驗章端**永遠只做一件事**：
+拿公鑰、離線 `verify-blob`。公鑰本來就可以自由散佈（第 3 章：公鑰怕掉包不怕偷，
+用受控通道發就好），驗章閘門於是完全不知道、也不需要知道私鑰住在哪。
+這就是 adapter 模式（轉接器模式）在信任工程上的用法——Java 工程師會認出這是
+「面向介面寫程式」：閘門依賴的介面是「digest＋簽章＋公鑰 → 過／不過」，
+保管後端只是可替換的實作。**威脅模型可以逐級升級，驗收標準一行不動。**
+
+## 收束：第二部的三章疊起來
+
+第二部到這裡收工，把三章疊回第 5 章那個「原語是疊的」圖：
+
+```
+金鑰保管（本章）           ← 私鑰安全 = 簽章有效性的地基
+  └─ 成品簽章＋digest 晉級（第 7 章）   ← 簽的是內容定址的身分
+       └─ SSDF 驗收標準（第 6 章）      ← 條文對回原語＋人為決定
+            └─ 三原語（第一部）
+```
+
+每一層的右欄都沒有消失：SSDF 不替你下信任決定、簽章閘門要有人建、金鑰服務擋不住
+在場濫用。密碼學把能固定的固定住了——剩下的，仍然是人。
+
+---
+
+**本章帶走的東西**：金鑰保管四級演進——CI 變數（偷走鑰匙、永久失守）→ keystore 檔
+→ HSM ／ Vault Transit（私鑰永不落地，失守降級為「在場濫用」，有帳可查、可輪替
+止血）；HSM／Vault 擋不住攻擊者在場時叫它簽毒成品，那要靠 policy＋audit＋
+provenance；adapter 模式讓保管後端逐級升級而驗章閘門零改動。
+
+**往第三部的橋**：第二部建好的這條鏈——簽 digest、逐環境驗、私鑰鎖進金庫——
+保證的是「**從 build 那一刻起，沒被改過**」。但回到第 5 章那張攻擊面表的 ④ Feed
+那格：typosquat 的惡意套件**也有完全合法的簽章**；xz-utils 的後門是維護者本人
+簽章發佈的。簽章驗的是「是不是那個人、是不是那份」，驗不了「那個人該不該信、
+那份東西該不該進來」。**簽章保證「沒被改」，擋不住「一開始就選錯」。**
+下一部處理進來的東西：依賴、SBOM、以及「信任一個你沒寫的套件」到底是在信什麼。

@@ -24,6 +24,11 @@ book:
         - 03-pki-trust-chain.qmd
         - 04-authenticated-encryption.qmd
         - 05-trust-primitives.qmd
+    - part: "第二部　把信任套到產線"
+      chapters:
+        - 06-ssdf.qmd
+        - 07-artifact-signing.qmd
+        - 08-key-custody.qmd
 
 bibliography: references.bib
 

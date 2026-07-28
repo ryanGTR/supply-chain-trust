@@ -1,0 +1,156 @@
+# 成品簽章：簽 digest，然後讓同一包 bytes 晉級
+
+上一章把 PS.2 讀成一句話：「給下游一個驗的辦法」。這一章把這句話落到鍵盤上——
+用什麼工具簽、簽的對象到底是什麼、以及一個聽起來像口號但其實是硬驗收點的原則：
+**build once, promote（建一次，晉級同一包）**。
+
+先預測：cosign、jarsigner、signtool、`dotnet nuget sign`——這些工具背後是幾套
+不同的密碼學？
+
+答案：**一套。**每一種拆開都是第 2 章那條流水線——hash 內容 → 私鑰簽 digest →
+附上憑證或公鑰的信任依據 → 下游驗到某個錨點。差別只在三件事：簽章**放在哪**
+（內嵌成品裡還是分離檔）、**信任模型**（X.509 鏈、PGP、還是平台身分）、
+**金鑰放哪**（下一章整章）。認得這個骨架，工具就只是方言。
+
+## cosign：container 世界的簽章方言
+
+cosign 是 Sigstore 專案的簽章工具，如今是 container image 簽章的事實標準。它有兩種用法，
+對應兩種信任模型：
+
+### Keyed：你自己管一對金鑰
+
+```bash
+cosign generate-key-pair                  # cosign.key（私鑰）+ cosign.pub（公鑰）
+cosign sign --key cosign.key <image>@sha256:...   # 簽的是 digest
+cosign verify --key cosign.pub <image>@sha256:...
+```
+
+這就是第 2 章 openssl 實驗的工業版：私鑰簽、公鑰驗，公鑰經由你自己的通道散佈給驗章方。
+信任錨點＝「這把公鑰確實是我們的」這個組織內的授予動作。
+
+### Keyless：用身分換短命憑證
+
+第 3 章介紹過 Sigstore 的思路 [@newman2022sigstore]，這裡看它落在 cosign 上的樣子：
+簽章時**不帶 `--key`**，cosign 引導你走 OIDC 登入（CI 環境則用平台核發的身分 token）→
+Fulcio 發一張綁定該身分、約十分鐘壽命的憑證 → 簽完金鑰即丟 → 簽章事件寫進 **Rekor
+透明日誌（transparency log）**存證。
+
+先預測：金鑰簽完就丟了，憑證十分鐘就過期——**事後**別人要怎麼驗？
+
+驗的東西變了：不再是「這把長期公鑰驗得開」，而是「這個簽章出自**某個身分**（例如
+某條 pipeline 的服務帳號），且 Rekor 上有當時的存證記錄——簽章時間落在憑證有效期內」。
+信任錨點從「你散佈的公鑰」搬到「身分供應商＋透明日誌」。沒有長期私鑰可偷、可管，
+是它最大的賣點。
+
+### Keyed vs keyless：取捨不在技術，在你的網路長什麼樣
+
+| 面向 | Keyed | Keyless |
+|---|---|---|
+| 長期私鑰 | 有——保管是你的問題（第 8 章） | 無——沒東西可偷 |
+| 依賴的基礎設施 | 無（離線自足） | OIDC ＋ Fulcio ＋ Rekor（公共服務或自建） |
+| 信任錨點 | 你散佈的公鑰 | 身分供應商＋透明日誌 |
+| 適合 | **氣隙／地端環境**（典型金融機構） | 連得上公共服務的開源專案與雲端 CI |
+
+對地端封閉網路，keyless 的依賴鏈是硬傷：連不上公共 Fulcio／Rekor，自建整套 Sigstore
+基礎設施成本又高。所以典型金融機構的合理收斂是 **keyed**——並在簽章時加
+`--tlog-upload=false`（不上公共透明日誌；keyed 模型本來就離線自足）。這是「取捨」
+不是「降級」：你放棄了透明日誌的公共存證，換得不依賴外網；被你放棄的那塊，
+要用內部稽核日誌補回來——右欄永遠要有人管。
+
+## 其他生態系：一句話帶過，骨架相同
+
+| 成品 | 工具 | 簽在哪 | 信任模型 |
+|---|---|---|---|
+| JAR／WAR（企業內） | `jarsigner` | 內嵌 `META-INF/`（manifest 逐檔 digest＋簽章塊） | X.509 憑證鏈 |
+| JAR（發 Maven Central） | GPG detached | 分離的 `.asc` 檔 | PGP 信任模型 |
+| Windows exe／dll | `signtool`（Authenticode） | 內嵌 PE 檔 | X.509 憑證鏈 |
+| NuGet 套件 | `dotnet nuget sign` | 內嵌 `.nupkg` | X.509 憑證鏈 |
+
+::: {.callout-warning}
+## 兩個實務坑，各值一次事故
+**其一**：.NET 的 **Strong Name（`sn.exe`）不是安全簽章**——它只給組件一個唯一身分
+（防撞名、版本綁定），官方文件明言它不是 security boundary。Java 工程師轉 .NET 最常見的
+誤會就是把「有 strong name」當「簽過了」。**其二**：簽章時**一定要帶 timestamp（TSA
+時間戳）**——否則 code-signing 憑證一過期，你歷年發佈的所有簽章一起失效。TSA 蓋的
+「簽於時間 T」戳記，讓簽章活得比憑證久。
+:::
+
+## 主戰場：四環境同 digest
+
+現在到本章真正想讓你帶走的東西。先預測：**同一份原始碼，在同一台機器上 build 兩次，
+兩個產物的 digest 會一樣嗎？**
+
+多數 build 不會。時間戳、建置環境的細微差異、封裝順序——太多不可重現（non-reproducible）
+的因素會讓兩次 build 產出不同的 bytes，於是不同的 digest。這個看似無害的事實，
+推出一個嚴重的結論：
+
+> **如果每個環境各自 rebuild，那你在測試環境驗過的，跟正式環境跑的，就不是同一包 bytes。**
+> 「測過了」三個字，在密碼學意義上不成立。
+
+解法是把流程反過來——**build once, promote**：
+
+```{mermaid}
+%%| label: fig-promote
+%%| fig-cap: "Build once, promote：簽一次 digest，同一包 bytes 逐環境晉級，每一關重驗。"
+flowchart LR
+  B["Build 一次<br/>產出 artifact"] --> D["記 digest<br/>（內容定址的身分）"]
+  D --> S["簽 digest<br/>（簽章跟著 bytes 走）"]
+  S --> T["測試環境<br/>驗 digest＋驗章"]
+  T --> U["驗收環境<br/>驗 digest＋驗章"]
+  U --> P["正式環境<br/>驗 digest＋驗章"]
+```
+
+拆開這個設計，每一步都站在第一部的某個原語上：
+
+- **digest 是內容定址的身分**：`sha256:...` 由 bytes 唯一決定。相比之下 tag（如
+  `myapp:1.2` 或 `latest`）只是可移動的標籤——同一個 tag 今天指這包、明天指那包
+  （tag 漂移）。**所以簽的對象必須是 digest，不是 tag**：簽 tag 等於簽一張會被
+  換內容的便利貼。
+- **簽章跟著 bytes 走**：簽的既然是 digest，成品從測試環境的儲存庫複製到正式環境的
+  儲存庫，只要 bytes 沒變、digest 就沒變、**build 時簽的那個章到了正式環境照樣驗得過**
+  ——不需要每個環境重簽。名字和路徑可以換，身分跟著內容。
+- **晉級（promote）＝只推進 digest 的變更**：在環境即程式碼（environment-as-code）的
+  做法裡，晉級是一張只改一行的變更——「正式環境的目標 digest 從 X 換成 Y」，
+  且 Y 必須是上一關真的部署過、驗過章的那個值。審核者看到的就是這麼一行。
+- **每一關重驗**：上一關驗過 ≠ 這一關可以免驗。每個環境部署前都重跑「digest 比對＋
+  驗章」，fail-closed（驗不過就擋）。
+
+於是「**四環境同 digest**」（開發、測試、驗收、正式看到同一個 `sha256:...`）從口號
+變成可驗收、可稽核的**不變量（invariant）**：任何時刻抓四個環境的 digest 出來比，
+只要有一個不同，就代表有環境走了「自己 rebuild」或「被掉包」的路——流程被破壞的
+訊號燈，一個指令就能點亮。這正是第 2 章 `tiny_sign_verify.sh` 那個「改一個 byte
+必定驗不過」性質的產線放大版：hash 的雪崩效應，讓「同一包」三個字有了數學意義。
+
+::: {.callout-important}
+## 只簽不驗＝假安全
+把簽章做進 pipeline 很容易有成就感，但如果部署端沒有那道 fail-closed 的驗章閘門，
+攻擊者推一個沒簽章的惡意 image 上去，**沒有任何東西會擋它**。我在自己的實驗專案裡
+就誠實記錄過這個狀態：「簽章流程跑得通」與「簽章在保護你」是兩回事。驗收一條簽章鏈，
+永遠先問驗的那端在哪裡、驗不過會怎樣。
+:::
+
+## 親手跑一遍：晉級與掉包
+
+`examples/tiny_promote_verify.sh` 用純本機 bash 把整個模型走一遍：build 出一個
+帶時間戳的成品 → 記 digest、簽 digest → 「晉級」到 test／uat／prod 三個目錄、
+每一關重驗 → 在 prod 掉包一個 byte 看閘門攔截 → 最後示範反面教材：在 prod 重新
+build 一次，看 digest 對不上。
+
+先預測：（1）晉級（複製）之後，build 時簽的簽章還驗得過嗎，還是每個環境要重簽？
+（2）同一份原始碼重 build，digest 會一樣嗎？
+
+```bash
+cd book/examples && ./tiny_promote_verify.sh
+```
+
+---
+
+**本章帶走的東西**：所有成品簽章工具共用一個骨架——hash、私鑰簽 digest、驗到錨點；
+keyed vs keyless 的取捨看你的網路，地端金融環境收斂到 keyed＋內部稽核；簽 digest
+不簽 tag；build once, promote 讓「四環境同 digest」成為可稽核的不變量；只簽不驗
+等於沒簽。
+
+**往下一章的橋**：整章有個沒明說的假設——pipeline 簽章時，**拿得到私鑰**。那把私鑰
+現在躺在哪？如果答案是「CI 的環境變數裡」，那你剛剛蓋好的整條信任鏈，地基是一把
+任何能跑 pipeline job 的人都能 `echo` 出來的鑰匙。下一章：金鑰保管的威脅模型，
+從最差的做法一路演進到私鑰永不落地。

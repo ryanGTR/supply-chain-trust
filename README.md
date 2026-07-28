@@ -24,7 +24,10 @@
 | 3 | `book/03-pki-trust-chain.qmd` | 憑證、信任鏈、trust anchor、Sigstore |
 | 4 | `book/04-authenticated-encryption.qmd` | 順序陷阱、MAC、EtM、AEAD（深入，可略讀） |
 | 5 | `book/05-trust-primitives.qmd` | 三原語能力邊界表＋全書地圖 |
-| 第二部 | （撰寫中） | SSDF、成品簽章、CI/CD 落地紀錄 |
+| 6 | `book/06-ssdf.qmd` | SSDF＝驗收標準；PS.1/2/3 對回原語 |
+| 7 | `book/07-artifact-signing.qmd` | cosign keyed/keyless、簽 digest、build once promote |
+| 8 | `book/08-key-custody.qmd` | 金鑰保管四級演進、Vault Transit、adapter 模式 |
+| 第三部 | （撰寫中） | 進來的東西：依賴、SBOM |
 
 ## 如何 render
 
@@ -42,7 +45,8 @@ quarto render --to pdf       # PDF 需 xelatex + Noto CJK 字型
 `book/examples/` 下的腳本純本機可跑、不碰網路：
 
 ```bash
-book/examples/tiny_sign_verify.sh   # 簽一個檔案→改一個 byte→看驗章失敗（第 2 章）
+book/examples/tiny_sign_verify.sh      # 簽一個檔案→改一個 byte→看驗章失敗（第 2 章）
+book/examples/tiny_promote_verify.sh   # build 一次→簽 digest→晉級三環境重驗→掉包被攔（第 7 章）
 ```
 
 ## 結構
@@ -53,7 +57,7 @@ supply-chain-trust/
 │   ├── _quarto.yml        # 書本設定（章節、格式、O'Reilly 風）
 │   ├── theme.scss         # serif + 紅色強調的樣式
 │   ├── index.qmd          # 前言
-│   ├── 01..05-*.qmd       # 序章 + 第一部四章
+│   ├── 01..08-*.qmd       # 序章 + 第一部四章 + 第二部三章
 │   ├── references.bib     # 書目
 │   └── examples/          # 可跑的實驗腳本
 ├── README.md              # 本檔
