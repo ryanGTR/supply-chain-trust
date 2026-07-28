@@ -1,0 +1,9 @@
+# Quarto build output
+book/_book/
+book/.quarto/
+book/index_files/
+*.tex
+
+# editor / OS noise
+*.swp
+.DS_Store
