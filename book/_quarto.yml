@@ -29,6 +29,9 @@ book:
         - 06-ssdf.qmd
         - 07-artifact-signing.qmd
         - 08-key-custody.qmd
+    - part: "第三部　進來的東西"
+      chapters:
+        - 09-what-are-you-trusting.qmd
 
 bibliography: references.bib
 
