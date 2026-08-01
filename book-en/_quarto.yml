@@ -1,0 +1,36 @@
+project:
+  type: book
+  output-dir: _book
+
+lang: en
+
+book:
+  title: "Trust in the Supply Chain"
+  subtitle: "A Bank Engineer's Implementation Notes"
+  author: "Ryan Chen"
+  date: today
+  search: true
+  sidebar:
+    style: docked
+    collapse-level: 1
+  chapters:
+    - index.qmd
+    - 01-why-supply-chain.qmd
+
+bibliography: references.bib
+
+format:
+  html:
+    theme:
+      - cosmo
+      - theme.scss
+    toc: true
+    code-copy: true
+    code-line-numbers: true
+    code-overflow: scroll
+    fig-cap-location: bottom
+    callout-appearance: simple
+    html-math-method: katex
+  epub:
+    toc: true
+    number-sections: true

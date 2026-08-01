@@ -1,0 +1,84 @@
+# Preface: Why a Bank IT Engineer Wrote a Book About Trust {.unnumbered}
+
+I work in IT at a financial institution. Banking life runs on governance, audit, and change
+management — we have an entire process for how a single piece of code reaches production.
+Then one day an uncomfortable thought landed: **that process governs the few thousand lines
+we wrote ourselves, while the system actually running in production is hundreds of thousands
+of lines of dependencies written by other people.** Where did that code come from? Has anyone
+tampered with it? On what grounds do we trust it? I could not answer.
+
+Rather than write yet another supply-chain security checklist, I decided to do something
+slow and thorough: **start at the bottom, with the cryptographic primitives, and build
+"trust" back up one layer at a time by hand** — what a signature actually guarantees, why a
+certificate deserves belief, how encryption and signing break when you combine them in the
+obvious order — and only then map those primitives onto the software supply chain, so that
+underneath fashionable words like SBOM, artifact signing, and provenance you can see exactly
+which blocks are carrying the load.
+
+This book is the record of that trip.
+
+## Who this book is for
+
+::: {.callout-note}
+## Set your expectations before you start
+**This book is written for:**
+
+- **Backend, platform, and DevOps engineers** who run `npm install`, `mvn package`, and
+  `docker pull` every day but have never worked out — or have avoided working out — why any
+  step in that chain deserves trust;
+- **Security, audit, and governance people** who understand controls but want to know what
+  the cryptography underneath a control actually guarantees, and what it very much **does
+  not**;
+- **Java engineers like me**: the analogies and code lean on Java (`Signature`, keystores,
+  `cacerts`) because that is my native language, and it may be yours.
+
+**What you need first:** the ability to read a medium-sized piece of code in any language,
+and comfort at a command line. **What you do not need:** a cryptography background. The
+mental models get built as we go, and the maths is deliberately left out — what stays is the
+intuition for *why it has to work this way*.
+:::
+
+## The through-line
+
+One sentence runs through the whole book. Hold on to it as you read:
+
+> **Trust is not computed. It is granted.**
+> Cryptography only pins a human trust decision in place with mathematics — making it
+> verifiable, tamper-evident, and transferable.
+
+Part I builds the three primitives: hashes, digital signatures, and MACs. Part II maps them
+onto a real production line: the requirements in NIST's SSDF, artifact signing in CI/CD, and
+key custody. Part III turns to what comes *in* — dependencies, SBOMs, and what you are
+actually trusting when you trust a package you did not write.
+
+There is one more discipline, borrowed from my previous book: **predict → test → explain.**
+Before every important conclusion I will stop and ask you to guess. Wherever something can be
+run, you get a script you can actually run (`examples/`) — sign a file, flip one byte, watch
+verification fail in front of you. The places where your guess was wrong are the places where
+you learn something.
+
+## Three ways to read this
+
+| Path | For whom | How to walk it |
+|---|---|---|
+| 🟢 **Ten-minute skim** | Deciding whether the book is worth your time | Read Chapter 1 plus the "What to take away" box at the end of each chapter |
+| 🟡 **The full trip** | You want the mental model to actually stick | Read in order, genuinely stop at every "predict first", and run the scripts in `examples/` |
+| 🔵 **Borrow a pattern** | You have a concrete problem (sign an artifact, validate a certificate chain) | Jump to the capability-boundary table in Chapter 5 to locate your problem, then read back into the matching chapter |
+
+Chapter 4 (authenticated encryption) is marked *deep dive, skippable*. The attacks it
+explains are lovely, but skipping it on a first pass costs you nothing on the main line.
+
+## Honest boundaries
+
+::: {.callout-important}
+## What this book is, and what it is not
+- This is **a learning record and a portfolio**, not a product, and not a basis for the
+  security design of your environment. I verified the conclusions as best I could — but read
+  them sceptically, because scepticism is exactly the habit this book is trying to teach.
+- Every scenario is described as "a financial institution" or "a typical banking
+  environment", and **the material has been de-identified**: no real organisation names, no
+  internal systems, no keys, no configuration.
+- I am not a cryptographer. I am an engineer who writes down what he does not understand and
+  then closes the gap step by step. For rigorous proofs, read the original papers (they are
+  in the references).
+:::
