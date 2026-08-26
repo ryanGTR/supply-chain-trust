@@ -64,3 +64,11 @@ supply-chain-trust/
 ├── book-en/               # 英文版（Preface + Ch.1，翻譯進行中）
 └── README.md              # 本檔
 ```
+
+## 延伸閱讀
+
+同一條線的實作紀錄與 lab：
+
+- [用 CRC 在筆電上重現一條企業 OpenShift 交付鏈](https://ryangtr.github.io/2026/08/ocp-pipeline-lab-tour/) — 第 7 章「build once, promote」在真實 pipeline 上的樣子（Harbor → GitOps，跨環境 digest 不變）
+- [儀表板全綠，四件事還是錯的](https://ryangtr.github.io/2026/08/four-green-lights-that-lie/) — 「宣稱 vs 實測」的方法論，與本書每章的誠實聲明同一個出發點
+- blog：<https://ryangtr.github.io>　·　lab repo：[ocp-pipeline-lab](https://github.com/ryanGTR/ocp-pipeline-lab)　·　[llm-from-scratch](https://github.com/ryanGTR/llm-from-scratch)
