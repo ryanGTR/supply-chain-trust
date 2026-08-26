@@ -10,3 +10,6 @@ book-en/index_files/
 # editor / OS noise
 *.swp
 .DS_Store
+
+# Claude 工作說明：本機 only（含私人 repo 路徑與素材禁區，不公開）
+CLAUDE.md

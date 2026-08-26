@@ -1,6 +1,6 @@
 # 書：《供應鏈上的信任：一個銀行 IT 工程師的實作紀錄》
 
-📖 **線上閱讀**：（尚未部署——本專案目前為本機 only，佔位連結：<https://ryangtr.github.io/supply-chain-trust/>）
+📖 **線上閱讀**：<https://ryangtr.github.io/supply-chain-trust/>（GitHub Pages，部署中）
 
 用 [Quarto](https://quarto.org) 排版的書（O'Reilly 風：serif 內文、紅色強調、callout 旁註）。
 從密碼學原語（hash／數位簽章／MAC）出發，一路搭到軟體供應鏈簽章的實作紀錄。
@@ -12,7 +12,7 @@
 - **學習與作品集**，不是產品、不是任何環境的安全設計依據。
 - 敘事方法：先預測 → 實測 → 為什麼；每章附能力邊界的誠實聲明。
 - 場景一律去識別（「某金融機構」／「典型銀行環境」），不含任何真實組織資訊。
-- 第一部素材底本：`~/Documents/security-wiki/`（2026-07-15 學習主線）。
+- 進度：前言＋第一部（原語，02–05）＋第二部（產線，06–08）＋第三部第 9 章已完成，第三部續章撰寫中。
 
 ## 目錄
 
@@ -27,7 +27,8 @@
 | 6 | `book/06-ssdf.qmd` | SSDF＝驗收標準；PS.1/2/3 對回原語 |
 | 7 | `book/07-artifact-signing.qmd` | cosign keyed/keyless、簽 digest、build once promote |
 | 8 | `book/08-key-custody.qmd` | 金鑰保管四級演進、Vault Transit、adapter 模式 |
-| 第三部 | （撰寫中） | 進來的東西：依賴、SBOM |
+| 9 | `book/09-what-are-you-trusting.qmd` | 依賴冰山、四個宣稱、四類風險、L1–L4 誠實邊界 |
+| 10– | （撰寫中） | 依賴治理五原則、撤銷迴路、受控 feed、SBOM |
 
 ## 如何 render
 
@@ -57,9 +58,9 @@ supply-chain-trust/
 │   ├── _quarto.yml        # 書本設定（章節、格式、O'Reilly 風）
 │   ├── theme.scss         # serif + 紅色強調的樣式
 │   ├── index.qmd          # 前言
-│   ├── 01..08-*.qmd       # 序章 + 第一部四章 + 第二部三章
+│   ├── 01..09-*.qmd       # 序章 + 第一部四章 + 第二部三章 + 第三部第 9 章
 │   ├── references.bib     # 書目
 │   └── examples/          # 可跑的實驗腳本
-├── README.md              # 本檔
-└── CLAUDE.md              # 給 Claude 的工作說明
+├── book-en/               # 英文版（Preface + Ch.1，翻譯進行中）
+└── README.md              # 本檔
 ```
