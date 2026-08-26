@@ -10,6 +10,7 @@ book:
   author: "Ryan Chen"
   date: today
   repo-url: https://github.com/ryanGTR/supply-chain-trust
+  repo-subdir: book   # 書在 repo 的子目錄，少了這行「看原始碼」會 404
   repo-actions: [source, issue]
   search: true
   sidebar:
