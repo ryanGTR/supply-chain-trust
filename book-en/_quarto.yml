@@ -9,6 +9,8 @@ book:
   subtitle: "A Bank Engineer's Implementation Notes"
   author: "Ryan Chen"
   date: today
+  repo-url: https://github.com/ryanGTR/supply-chain-trust
+  repo-actions: [source, issue]
   search: true
   sidebar:
     style: docked

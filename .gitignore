@@ -1,7 +1,10 @@
-# Quarto build output
+# Quarto build output（渲染產物不進版控；公開站用 render 產出）
 book/_book/
 book/.quarto/
 book/index_files/
+book-en/_book/
+book-en/.quarto/
+book-en/index_files/
 *.tex
 
 # editor / OS noise

@@ -65,6 +65,21 @@ Back to your prediction. Why would an attacker bother with your firewall? **Come
 dependency and you will build them into the system yourself, then sign it off into production.**
 The front door has a guard. The back door you opened yourself.
 
+::: {.callout-note}
+## Implicit granting: all three cases are the same case
+You might object: nobody poisoned anything in Log4Shell, so how is that a *trust* problem?
+But **the granting did happen — you just did not notice it**. The moment `log4j` entered the
+project, you granted it permission to do anything it likes inside your process. And usually
+you granted it *transitively*: a direct dependency you trusted issued that grant on your
+behalf.
+
+This is exactly why cryptography cannot help with Log4Shell. The signature is valid; the
+package really was published by that project. The question was never "is this the right
+artifact" — it was "should this thing have that much power". Which sharpens the through-line
+of the book: **trust is granted — and the most dangerous grants are the ones you did not know
+you made.**
+:::
+
 ## Six attack surfaces: every step from source to production is a target
 
 Lay out how software travels from an engineer's hands to production, and every link is a
